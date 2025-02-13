@@ -804,78 +804,6 @@ async function run() {
 
 
 
-    // app.post("/send-money", async (req, res) => {
-    //   try {
-    //     const { senderEmail, recipientPhone, amount, fee } = req.body;
-     
-     
-    
-    //     if (!senderEmail || !recipientPhone || amount < 50) {
-    //       return res.status(400).json({ success: false, message: "Invalid request" });
-    //     }
-    
-    //     // Find sender and recipient
-    //     const sender = await userCollection.findOne({ email: senderEmail });
-    //     const recipient = await userCollection.findOne({ phone: recipientPhone });
-    
-    //     if (!sender || !recipient) {
-    //       return res.status(404).json({ success: false, message: "User not found" });
-    //     }
-    
-    //     if (sender.balance < amount + fee) {
-    //       return res.status(400).json({ success: false, message: "Insufficient balance" });
-    //     }
-    
-    //     // Start Transaction
-    //     const session = client.startSession();
-    //     session.startTransaction();
-    
-    //     try {
-    //       // Deduct balance from sender
-    //       await userCollection.updateOne(
-    //         { _id: new ObjectId(sender._id) },
-    //         { $inc: { balance: -(amount + fee) } },
-    //         { session }
-    //       );
-    
-    //       // Add balance to recipient
-    //       await userCollection.updateOne(
-    //         { _id: new ObjectId(recipient._id) },
-    //         { $inc: { balance: amount } },
-    //         { session }
-    //       );
-    
-    //       // Save transaction
-    //       const newTransaction = {
-    //         sender: sender.email,
-    //         recipient: recipient.phone,
-    //         amount,
-    //         fee,
-    //         transactionId: `TXN${Date.now()}`,
-    //         status: "Completed",
-    //         date: new Date(),
-    //       };
-    
-    //       await transactionsCollection.insertOne(newTransaction, { session });
-    
-    //       // Commit Transaction
-    //       await session.commitTransaction();
-    //       session.endSession();
-    
-    //       return res.json({ success: true, message: "Money sent successfully", transaction: newTransaction });
-    //     } catch (error) {
-    //       await session.abortTransaction();
-    //       session.endSession();
-    //       throw error;
-    //     }
-    //   } catch (error) {
-    //     console.error("Error sending money:", error);
-    //     res.status(500).json({ success: false, message: "Internal server error" });
-    //   }
-    // });
-
-
-
     app.post("/send-money",verifyToken, async (req, res) => {
       try {
         const { senderEmail, recipientPhone, amount } = req.body;
@@ -1096,6 +1024,83 @@ app.get("/transactions",verifyToken, async (req, res) => {
     res.json(transactions);
   } catch (error) {
     console.error("Error fetching transactions:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+
+
+
+app.post("/cash-in-user", async (req, res) => {
+  try {
+    const { agentEmail, userPhone, amount, pin } = req.body;
+
+    if (!agentEmail || !userPhone || !amount || amount < 1 || !pin) {
+      return res.status(400).json({ success: false, message: "Invalid request" });
+    }
+
+    // Find agent and user
+    const agent = await userCollection.findOne({ email: agentEmail });
+    const user = await userCollection.findOne({ phone: userPhone });
+
+    if (!agent || !user) {
+      return res.status(404).json({ success: false, message: "Agent or User not found" });
+    }
+
+    // Verify agent's PIN (Hashed)
+    const isPinValid = await bcrypt.compare(pin, agent.pin);
+    if (!isPinValid) {
+      return res.status(400).json({ success: false, message: "Incorrect PIN" });
+    }
+
+    if (agent.balance < amount) {
+      return res.status(400).json({ success: false, message: "Insufficient balance in agent account" });
+    }
+
+    // Start Transaction
+    const session = client.startSession();
+    session.startTransaction();
+
+    try {
+      // Deduct balance from agent
+      await userCollection.updateOne(
+        { _id: new ObjectId(agent._id) },
+        { $inc: { balance: -amount } },
+        { session }
+      );
+
+      // Add balance to user
+      await userCollection.updateOne(
+        { _id: new ObjectId(user._id) },
+        { $inc: { balance: amount } },
+        { session }
+      );
+
+      // Save transaction
+      const newTransaction = {
+        sender: agent.email,
+        recipient: user.phone,
+        amount,
+        transactionId: `TXN${Date.now()}`,
+        type: "Cash-In",
+        status: "Completed",
+        date: new Date(),
+      };
+
+      await transactionsCollection.insertOne(newTransaction, { session });
+
+      // Commit Transaction
+      await session.commitTransaction();
+      session.endSession();
+
+      return res.json({ success: true, message: "Cash-In successful", transaction: newTransaction });
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
+  } catch (error) {
+    console.error("Error in Cash-In:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 });

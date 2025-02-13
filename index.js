@@ -876,7 +876,7 @@ async function run() {
 
 
 
-    app.post("/send-money", async (req, res) => {
+    app.post("/send-money",verifyToken, async (req, res) => {
       try {
         const { senderEmail, recipientPhone, amount } = req.body;
     
@@ -944,6 +944,7 @@ async function run() {
             transactionId: `TXN${Date.now()}`,
             status: "Completed",
             date: new Date(),
+            type:"Send Money"
           };
     
           await transactionsCollection.insertOne(newTransaction, { session });
@@ -973,7 +974,7 @@ async function run() {
 
 
 
-app.post("/cash-out", async (req, res) => {
+app.post("/cash-out", verifyToken,async (req, res) => {
   try {
     const { userEmail, agentPhone, amount, pin } = req.body;
 
@@ -1047,7 +1048,8 @@ app.post("/cash-out", async (req, res) => {
         fee: cashOutFee,
         transactionId: `TXN${Date.now()}`,
         status: "Completed",
-        date: new Date(),
+        date: new Date(), 
+        type:"Cash Out"
       };
 
       await transactionsCollection.insertOne(newTransaction, { session });
@@ -1071,6 +1073,33 @@ app.post("/cash-out", async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
+
+
+app.get("/transactions",verifyToken, async (req, res) => {
+  try {
+    const { email } = req.query;
+    if (!email) return res.status(400).json({ success: false, message: "Email is required." });
+
+    // Find user based on email
+    const user = await userCollection.findOne({ email });
+    if (!user) return res.status(404).json({ success: false, message: "User not found." });
+
+    // Fetch transactions related to the user
+    const transactions = await transactionsCollection
+      .find({
+        $or: [{ sender: email }, { recipient: email }],
+      })
+      .sort({ date: -1 }) // Latest transactions first
+      .limit(100)
+      .toArray();
+
+    res.json(transactions);
+  } catch (error) {
+    console.error("Error fetching transactions:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
 
     
 

@@ -96,7 +96,11 @@ async function run() {
     const campCollection = db.collection("camp");
     const messageCollection = db.collection("message");
     const replyMessageCollection = db.collection("replyMessage");
+
     const userCollection = db.collection("users");
+    const systemCollection = db.collection("systemCollection");
+   
+    const transactionsCollection = db.collection("transactions");
     const joinCampCollection = db.collection("joinCamp");
     const paymentCollection = db.collection("payments");
     const galleryCollection = db.collection("gallery");
@@ -793,6 +797,282 @@ async function run() {
         res.status(500).json({ message: "Failed to find user" });
       }
     });
+
+
+
+
+
+
+
+    // app.post("/send-money", async (req, res) => {
+    //   try {
+    //     const { senderEmail, recipientPhone, amount, fee } = req.body;
+     
+     
+    
+    //     if (!senderEmail || !recipientPhone || amount < 50) {
+    //       return res.status(400).json({ success: false, message: "Invalid request" });
+    //     }
+    
+    //     // Find sender and recipient
+    //     const sender = await userCollection.findOne({ email: senderEmail });
+    //     const recipient = await userCollection.findOne({ phone: recipientPhone });
+    
+    //     if (!sender || !recipient) {
+    //       return res.status(404).json({ success: false, message: "User not found" });
+    //     }
+    
+    //     if (sender.balance < amount + fee) {
+    //       return res.status(400).json({ success: false, message: "Insufficient balance" });
+    //     }
+    
+    //     // Start Transaction
+    //     const session = client.startSession();
+    //     session.startTransaction();
+    
+    //     try {
+    //       // Deduct balance from sender
+    //       await userCollection.updateOne(
+    //         { _id: new ObjectId(sender._id) },
+    //         { $inc: { balance: -(amount + fee) } },
+    //         { session }
+    //       );
+    
+    //       // Add balance to recipient
+    //       await userCollection.updateOne(
+    //         { _id: new ObjectId(recipient._id) },
+    //         { $inc: { balance: amount } },
+    //         { session }
+    //       );
+    
+    //       // Save transaction
+    //       const newTransaction = {
+    //         sender: sender.email,
+    //         recipient: recipient.phone,
+    //         amount,
+    //         fee,
+    //         transactionId: `TXN${Date.now()}`,
+    //         status: "Completed",
+    //         date: new Date(),
+    //       };
+    
+    //       await transactionsCollection.insertOne(newTransaction, { session });
+    
+    //       // Commit Transaction
+    //       await session.commitTransaction();
+    //       session.endSession();
+    
+    //       return res.json({ success: true, message: "Money sent successfully", transaction: newTransaction });
+    //     } catch (error) {
+    //       await session.abortTransaction();
+    //       session.endSession();
+    //       throw error;
+    //     }
+    //   } catch (error) {
+    //     console.error("Error sending money:", error);
+    //     res.status(500).json({ success: false, message: "Internal server error" });
+    //   }
+    // });
+
+
+
+    app.post("/send-money", async (req, res) => {
+      try {
+        const { senderEmail, recipientPhone, amount } = req.body;
+    
+        if (!senderEmail || !recipientPhone || amount < 50) {
+          return res.status(400).json({ success: false, message: "Invalid request" });
+        }
+    
+        // Find sender, recipient, and admin
+        const sender = await userCollection.findOne({ email: senderEmail });
+        const recipient = await userCollection.findOne({ phone: recipientPhone });
+        const admin = await userCollection.findOne({ accountType: "Admin" });
+    
+        if (!sender || !recipient || !admin) {
+          return res.status(404).json({ success: false, message: "User/Admin not found" });
+        }
+    
+        // Transaction fee logic
+        const transactionFee = amount > 100 ? 5 : 0;
+        const finalAmount = amount - transactionFee;
+    
+        if (sender.balance < amount + transactionFee) {
+          return res.status(400).json({ success: false, message: "Insufficient balance" });
+        }
+    
+        // Start Transaction
+        const session = client.startSession();
+        session.startTransaction();
+    
+        try {
+          // Deduct balance from sender
+          await userCollection.updateOne(
+            { _id: sender._id },
+            { $inc: { balance: -(amount + transactionFee) } },
+            { session }
+          );
+    
+          // Add balance to recipient
+          await userCollection.updateOne(
+            { _id: recipient._id },
+            { $inc: { balance: finalAmount } },
+            { session }
+          );
+    
+          // Add fee to admin
+          await userCollection.updateOne(
+            { _id: admin._id },
+            { $inc: { balance: transactionFee } },
+            { session }
+          );
+    
+          // Update total money in system (can be stored in a separate `systemCollection`)
+          await systemCollection.updateOne(
+            { key: "total_money" },
+            { $inc: { amount: -transactionFee } },
+            { upsert: true, session }
+          );
+    
+          // Save transaction
+          const newTransaction = {
+            sender: sender.email,
+            recipient: recipient.phone,
+            amount,
+            fee: transactionFee,
+            totalAmount: amount + transactionFee,
+            transactionId: `TXN${Date.now()}`,
+            status: "Completed",
+            date: new Date(),
+          };
+    
+          await transactionsCollection.insertOne(newTransaction, { session });
+    
+          // Commit Transaction
+          await session.commitTransaction();
+          session.endSession();
+    
+          return res.json({
+            success: true,
+            message: "Money sent successfully",
+            transaction: newTransaction,
+            updatedBalance: sender.balance - (amount + transactionFee),
+          });
+        } catch (error) {
+          await session.abortTransaction();
+          session.endSession();
+          throw error;
+        }
+      } catch (error) {
+        console.error("Error sending money:", error);
+        res.status(500).json({ success: false, message: "Internal server error" });
+      }
+    });
+
+
+
+
+
+app.post("/cash-out", async (req, res) => {
+  try {
+    const { userEmail, agentPhone, amount, pin } = req.body;
+
+    if (!userEmail || !agentPhone || amount < 1) {
+      return res.status(400).json({ success: false, message: "Invalid request" });
+    }
+
+    // Find user, agent, and admin
+    const user = await userCollection.findOne({ email: userEmail });
+    const agent = await userCollection.findOne({ phone: agentPhone, accountType: "Agent" });
+    const admin = await userCollection.findOne({ accountType: "Admin" });
+
+    if (!user || !agent || !admin) {
+      return res.status(404).json({ success: false, message: "User, Agent, or Admin not found" });
+    }
+
+    // Verify PIN using bcrypt
+    const isPinValid = await bcrypt.compare(pin, user.pin);
+    if (!isPinValid) {
+      return res.status(401).json({ success: false, message: "Invalid PIN" });
+    }
+
+    // Calculate fees
+    const cashOutFee = (amount * 1.5) / 100; // 1.5% fee
+    const agentEarning = (amount * 1) / 100; // 1% agent earning
+    const adminEarning = (amount * 0.5) / 100; // 0.5% admin earning
+    const totalDeduction = amount + cashOutFee; // Total deducted from the user
+
+    if (user.balance < totalDeduction) {
+      return res.status(400).json({ success: false, message: "Insufficient balance" });
+    }
+
+    // Start Transaction
+    const session = client.startSession();
+    session.startTransaction();
+
+    try {
+      // Deduct balance from user
+      await userCollection.updateOne(
+        { _id: user._id },
+        { $inc: { balance: -totalDeduction } },
+        { session }
+      );
+
+      // Add balance to agent
+      await userCollection.updateOne(
+        { _id: agent._id },
+        { $inc: { balance: amount, earnings: agentEarning } },
+        { session }
+      );
+
+      // Add earnings to admin
+      await userCollection.updateOne(
+        { _id: admin._id },
+        { $inc: { balance: adminEarning } },
+        { session }
+      );
+
+      // Update total money in system (stored in `systemCollection`)
+      await systemCollection.updateOne(
+        { key: "total_money" },
+        { $inc: { amount: -cashOutFee } },
+        { upsert: true, session }
+      );
+
+      // Save transaction
+      const newTransaction = {
+        user: user.email,
+        agent: agent.phone,
+        amount,
+        fee: cashOutFee,
+        transactionId: `TXN${Date.now()}`,
+        status: "Completed",
+        date: new Date(),
+      };
+
+      await transactionsCollection.insertOne(newTransaction, { session });
+
+      // Commit Transaction
+      await session.commitTransaction();
+      session.endSession();
+
+      return res.json({
+        success: true,
+        message: "Cash-out successful",
+        transaction: newTransaction,
+      });
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
+  } catch (error) {
+    console.error("Error processing cash-out:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+    
 
 
 

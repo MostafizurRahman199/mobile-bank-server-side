@@ -1110,7 +1110,7 @@ app.post("/cash-in-user", async (req, res) => {
 
 app.post("/agent-request", async (req, res) => {
   try {
-    const { agentEmail, requestType } = req.body;
+    const { agentEmail, requestType, agentId, agentName } = req.body;
 
     if (!agentEmail || !requestType) {
       return res.status(400).json({ success: false, message: "Invalid request data" });
@@ -1120,8 +1120,11 @@ app.post("/agent-request", async (req, res) => {
     const newRequest = {
       agentEmail,
       requestType,
+      agentName,
+      agentId,
       status: "Pending",  // Default status
       createdAt: new Date()
+
     };
 
     const result = await agentRequestsCollection.insertOne(newRequest);
@@ -1140,7 +1143,7 @@ app.post("/agent-request", async (req, res) => {
 
 app.get("/agent-requests", async (req, res) => {
   try {
-    const { email, type } = req.query;
+    const { email, type} = req.query;
 
     if (!email || !type) {
       return res.status(400).json({ success: false, message: "Missing email or request type" });
@@ -1150,6 +1153,7 @@ app.get("/agent-requests", async (req, res) => {
     const requests = await agentRequestsCollection.find({
       agentEmail: email,
       requestType: type, // Ensure only the correct type is returned
+     
     }).toArray();
 
     res.json({ success: true, requests });
@@ -1165,7 +1169,7 @@ app.get("/agent-requests", async (req, res) => {
 
 app.post("/withdraw-request", async (req, res) => {
   try {
-    const { agentEmail, requestType, amount } = req.body;
+    const { agentEmail, requestType, amount, agentId, agentName  } = req.body;
     if (!agentEmail || !requestType) {
       return res.status(400).json({ success: false, message: "Invalid request" });
     }
@@ -1182,6 +1186,8 @@ app.post("/withdraw-request", async (req, res) => {
     const newRequest = {
       agentEmail,
       requestType,
+        agentId,
+       agentName ,
       amount: requestType === "Withdraw Request" ? amount : null,
       status: "Pending",
       createdAt: new Date(),
@@ -1261,6 +1267,19 @@ app.get("/all-users", verifyToken, verifyAdmin, async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
+
+
+
+app.get("/all-agents", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const users = await userCollection.find({ accountType: "Agent" }).toArray();
+    res.json({ success: true, users });
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
 
 
 

@@ -99,6 +99,8 @@ async function run() {
 
     const userCollection = db.collection("users");
     const systemCollection = db.collection("systemCollection");
+    const agentRequestsCollection = db.collection("agentRequestsCollection");
+
    
     const transactionsCollection = db.collection("transactions");
     const joinCampCollection = db.collection("joinCamp");
@@ -1106,7 +1108,93 @@ app.post("/cash-in-user", async (req, res) => {
 });
 
 
+app.post("/agent-request", async (req, res) => {
+  try {
+    const { agentEmail, requestType } = req.body;
+
+    if (!agentEmail || !requestType) {
+      return res.status(400).json({ success: false, message: "Invalid request data" });
+    }
+
+    // Create a new request
+    const newRequest = {
+      agentEmail,
+      requestType,
+      status: "Pending",  // Default status
+      createdAt: new Date()
+    };
+
+    const result = await agentRequestsCollection.insertOne(newRequest);
     
+    res.json({ success: true, message: "Request submitted successfully!", requestId: result.insertedId });
+
+  } catch (error) {
+    console.error("Error submitting request:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+//#199
+
+
+
+
+app.get("/agent-requests", async (req, res) => {
+  try {
+    const { email, type } = req.query;
+
+    if (!email || !type) {
+      return res.status(400).json({ success: false, message: "Missing email or request type" });
+    }
+
+    // Fetch only requests of the specified type
+    const requests = await agentRequestsCollection.find({
+      agentEmail: email,
+      requestType: type, // Ensure only the correct type is returned
+    }).toArray();
+
+    res.json({ success: true, requests });
+
+  } catch (error) {
+    console.error("Error fetching requests:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+
+
+
+app.post("/withdraw-request", async (req, res) => {
+  try {
+    const { agentEmail, requestType, amount } = req.body;
+    if (!agentEmail || !requestType) {
+      return res.status(400).json({ success: false, message: "Invalid request" });
+    }
+
+    const agent = await userCollection.findOne({ email: agentEmail });
+    if (!agent) {
+      return res.status(404).json({ success: false, message: "Agent not found" });
+    }
+
+    if (requestType === "Withdraw Request" && (!amount || amount <= 0)) {
+      return res.status(400).json({ success: false, message: "Invalid withdrawal amount" });
+    }
+
+    const newRequest = {
+      agentEmail,
+      requestType,
+      amount: requestType === "Withdraw Request" ? amount : null,
+      status: "Pending",
+      createdAt: new Date(),
+    };
+
+    await agentRequestsCollection.insertOne(newRequest);
+    res.json({ success: true, message: "Request submitted successfully" });
+  } catch (error) {
+    console.error("Error processing request:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
 
 
 

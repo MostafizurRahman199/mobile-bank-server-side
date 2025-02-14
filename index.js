@@ -120,7 +120,7 @@ async function run() {
     const verifyAdmin = async (req, res, next) => {
       const email = req?.user?.email;
       const user = await userCollection.findOne({ email });
-      const isAdmin = user?.role === "Admin";
+      const isAdmin = user?.accountType === "Admin";
       if (!isAdmin) {
         return res.status(403).send({ message: "Access Denied" });
       }
@@ -804,7 +804,7 @@ async function run() {
 
 
 
-
+// #new 
 
     app.post("/send-money",verifyToken, async (req, res) => {
       try {
@@ -1194,6 +1194,40 @@ app.post("/withdraw-request", async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
+
+
+
+app.get("/admin-dashboard",verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    // Fetch total number of users
+    const totalUsers = await userCollection.countDocuments({ accountType: "User" });
+
+    // Fetch total number of agents
+    const totalAgents = await userCollection.countDocuments({ accountType: "Agent" });
+
+    // Fetch total money in the system from systemCollection
+    const systemData = await systemCollection.findOne({});
+    const totalMoney = systemData?.amount || 0;
+
+    // Fetch Admin's earnings from userCollection where accountType = "Admin"
+    const admin = await userCollection.findOne({ accountType: "Admin" });
+    const adminEarnings = admin?.earnings || 0;
+
+    // Send the response with dashboard data
+    res.json({
+      success: true,
+      totalUsers,
+      totalAgents,
+      totalMoney,
+      adminEarnings,
+    });
+
+  } catch (error) {
+    console.error("Error fetching admin dashboard data:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
 
 
 

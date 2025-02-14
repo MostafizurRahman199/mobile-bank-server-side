@@ -1281,6 +1281,130 @@ app.get("/all-agents", verifyToken, verifyAdmin, async (req, res) => {
 });
 
 
+app.get("/admin/balance-requests",verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const requests = await agentRequestsCollection.find({ requestType: "Request Balance" }).sort({ createdAt: -1 }).toArray();
+
+    // Fetch associated agent details (balance & earnings)
+    for (const request of requests) {
+      const agentDetails = await userCollection.findOne({ email: request?.agentEmail });
+
+
+      request.agentDetails = agentDetails
+        ? { name: agentDetails?.name, balance: agentDetails?.balance, earnings: agentDetails?.earnings }
+        : null;
+    }
+
+    res.json({ success: true, requests });
+  } catch (error) {
+    console.error("Error fetching balance requests:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+
+
+
+app.post("/admin/update-balance-request", verifyToken,verifyAdmin, async (req, res) => {
+  try {
+    const { requestId, agentEmail, action } = req.body;
+
+    if (!ObjectId.isValid(requestId)) {
+      return res.status(400).json({ success: false, message: "Invalid request ID" });
+    }
+
+    // Find agent and update balance
+    const agent = await userCollection.findOne({ email: agentEmail });
+    if (!agent) {
+      return res.status(404).json({ success: false, message: "Agent not found" });
+    }
+
+    if (action === "Approve") {
+      // Add 100,000 to agent's balance
+      await userCollection.updateOne(
+        { email: agentEmail },
+        { $inc: { balance: 100000 } }
+      );
+    }
+
+    // Update request status
+    await agentRequestsCollection.updateOne(
+      { _id: new ObjectId(requestId) },
+      { $set: { status: action } }
+    );
+
+    res.json({ success: true, message: `Balance request ${action.toLowerCase()}ed successfully!` });
+  } catch (error) {
+    console.error("Error updating balance request:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+
+// 📌 Fetch All Withdraw Requests (Admin)
+app.get("/admin/withdraw-requests",verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const requests = await agentRequestsCollection.find({ requestType: "Withdraw Request" }).sort({ createdAt: -1 }).toArray();
+
+    // Fetch associated agent details (earnings)
+    for (const request of requests) {
+      const agentDetails = await userCollection.findOne({ email: request?.agentEmail });
+      request.agentDetails = agentDetails
+        ? { name: agentDetails?.name, earnings: agentDetails?.earnings }
+        : null;
+    }
+
+    res.json({ success: true, requests });
+  } catch (error) {
+    console.error("Error fetching withdraw requests:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+
+
+
+app.post("/admin/update-withdraw-request",verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { requestId, agentEmail, amount, action } = req.body;
+
+    if (!ObjectId.isValid(requestId)) {
+      return res.status(400).json({ success: false, message: "Invalid request ID" });
+    }
+
+    // Find agent and validate earnings
+    const agent = await userCollection.findOne({ email: agentEmail });
+    if (!agent) {
+      return res.status(404).json({ success: false, message: "Agent not found" });
+    }
+
+    if (action === "Approve") {
+      if (agent.earnings < amount) {
+        return res.status(400).json({ success: false, message: "Insufficient earnings!" });
+      }
+
+      // Deduct requested amount from agent's earnings
+      await userCollection.updateOne(
+        { email: agentEmail },
+        { $inc: { earnings: - amount } }
+      );
+    }
+
+    // Update request status
+    await agentRequestsCollection.updateOne(
+      { _id: new ObjectId(requestId) },
+      { $set: { status: action } }
+    );
+
+    res.json({ success: true, message: `Withdraw request ${action.toLowerCase()}ed successfully!` });
+  } catch (error) {
+    console.error("Error updating withdraw request:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+
+
 
 
 

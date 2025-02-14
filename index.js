@@ -1005,7 +1005,7 @@ app.post("/cash-out", verifyToken,async (req, res) => {
 });
 
 
-app.get("/transactions",verifyToken, async (req, res) => {
+app.get("/transactions", verifyToken, async (req, res) => {
   try {
     const { email } = req.query;
     if (!email) return res.status(400).json({ success: false, message: "Email is required." });
@@ -1227,6 +1227,43 @@ app.get("/admin-dashboard",verifyToken, verifyAdmin, async (req, res) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
+
+
+
+app.post("/block-user", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const { userId, isBlocked } = req.body;
+    const updateUser = await userCollection.updateOne(
+      { _id: new ObjectId(userId) },
+      { $set: { isBlocked } }
+    );
+
+    if (updateUser.modifiedCount === 0) {
+      return res.status(400).json({ success: false, message: "Failed to update user status" });
+    }
+
+    res.json({ success: true, message: `User ${isBlocked ? "blocked" : "unblocked"} successfully` });
+  } catch (error) {
+    console.error("Error blocking user:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+
+
+
+app.get("/all-users", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const users = await userCollection.find({ accountType: "User" }).toArray();
+    res.json({ success: true, users });
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+
+
 
 
 

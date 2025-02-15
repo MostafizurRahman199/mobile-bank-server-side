@@ -808,7 +808,7 @@ async function run() {
 
     app.post("/send-money",verifyToken, async (req, res) => {
       try {
-        const { senderEmail, recipientPhone, amount } = req.body;
+        const { senderEmail, senderPhone, recipientPhone, amount } = req.body;
     
         if (!senderEmail || !recipientPhone || amount < 50) {
           return res.status(400).json({ success: false, message: "Invalid request" });
@@ -867,6 +867,7 @@ async function run() {
           // Save transaction
           const newTransaction = {
             sender: sender.email,
+            senderPhone:sender.phone,
             recipient: recipient.phone,
             amount,
             fee: transactionFee,
@@ -906,7 +907,7 @@ async function run() {
 
 app.post("/cash-out", verifyToken,async (req, res) => {
   try {
-    const { userEmail, agentPhone, amount, pin } = req.body;
+    const { userEmail,userPhone, agentPhone, amount, pin } = req.body;
 
     if (!userEmail || !agentPhone || amount < 1) {
       return res.status(400).json({ success: false, message: "Invalid request" });
@@ -972,8 +973,9 @@ app.post("/cash-out", verifyToken,async (req, res) => {
 
       // Save transaction
       const newTransaction = {
-        user: user.email,
-        agent: agent.phone,
+        sender: user.email,
+        senderPhone:user.phone,
+        recipient: agent.phone,
         amount,
         fee: cashOutFee,
         transactionId: `TXN${Date.now()}`,
@@ -1081,6 +1083,7 @@ app.post("/cash-in-user", async (req, res) => {
       // Save transaction
       const newTransaction = {
         sender: agent.email,
+        senderPhone:agent.phone,
         recipient: user.phone,
         amount,
         transactionId: `TXN${Date.now()}`,
@@ -1291,7 +1294,12 @@ app.get("/admin/balance-requests",verifyToken, verifyAdmin, async (req, res) => 
 
 
       request.agentDetails = agentDetails
-        ? { name: agentDetails?.name, balance: agentDetails?.balance, earnings: agentDetails?.earnings }
+        ? { 
+          name: agentDetails?.name, 
+          balance: agentDetails?.balance, 
+          earnings: agentDetails?.earnings,
+          phone: agentDetails.phone,
+        }
         : null;
     }
 
@@ -1350,7 +1358,12 @@ app.get("/admin/withdraw-requests",verifyToken, verifyAdmin, async (req, res) =>
     for (const request of requests) {
       const agentDetails = await userCollection.findOne({ email: request?.agentEmail });
       request.agentDetails = agentDetails
-        ? { name: agentDetails?.name, earnings: agentDetails?.earnings }
+        ? { 
+          name: agentDetails?.name, 
+          earnings: agentDetails?.earnings ,
+          phone:agentDetails.phone,
+        
+        }
         : null;
     }
 

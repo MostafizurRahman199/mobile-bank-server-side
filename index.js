@@ -960,14 +960,14 @@ app.post("/cash-out", verifyToken,async (req, res) => {
       // Add earnings to admin
       await userCollection.updateOne(
         { _id: admin._id },
-        { $inc: { balance: adminEarning } },
+        { $inc: { earnings: adminEarning } },
         { session }
       );
 
       // Update total money in system (stored in `systemCollection`)
       await systemCollection.updateOne(
         { key: "total_money" },
-        { $inc: { amount: -cashOutFee } },
+        { $inc: { amount: -amount } },
         { upsert: true, session }
       );
 
@@ -1078,6 +1078,12 @@ app.post("/cash-in-user", async (req, res) => {
         { _id: new ObjectId(user._id) },
         { $inc: { balance: amount } },
         { session }
+      );
+
+      await systemCollection.updateOne(
+        { key: "total_money" },
+        { $inc: { amount: amount } },
+        { upsert: true, session }
       );
 
       // Save transaction

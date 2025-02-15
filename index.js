@@ -26,7 +26,8 @@ app.use(
     origin: [
             "http://localhost:4173", 
             "http://localhost:5173",
-            "https://be-healthy-by-mostafiz.netlify.app",
+            "https://mobile-banking-by-mostafiz.netlify.app"
+            
           ],
 
     methods: ["GET", "POST", "PUT", "DELETE"],
